@@ -7,21 +7,21 @@ from io import BytesIO
 # =========================================================
 
 st.set_page_config(
-    page_title="Cruce de RUT y Fecha",
+    page_title="Cruce RUT y Sexo",
     page_icon="📊",
     layout="wide"
 )
 
-st.title("📊 Cruce de archivos por RUT y Fecha")
+st.title("📊 Cruce automático de RUT y Sexo")
 
 st.write(
-    "La aplicación buscará coincidencias cuando el RUT y la Fecha "
-    "sean iguales en ambos archivos."
+    "El sistema compara automáticamente el RUT del archivo principal "
+    "con el RUN paciente del archivo secundario y agrega el Sexo."
 )
 
 
 # =========================================================
-# FUNCIONES
+# FUNCIÓN NORMALIZAR RUT
 # =========================================================
 
 def normalizar_rut(valor):
@@ -29,50 +29,70 @@ def normalizar_rut(valor):
     if pd.isna(valor):
         return ""
 
-    rut = str(valor).strip().upper()
+    valor = str(valor).strip().upper()
 
-    rut = rut.replace(".", "")
-    rut = rut.replace("-", "")
-    rut = rut.replace(" ", "")
+    # Eliminar puntos
+    valor = valor.replace(".", "")
 
-    return rut
+    # Eliminar guiones
+    valor = valor.replace("-", "")
+
+    # Eliminar espacios
+    valor = valor.replace(" ", "")
+
+    return valor
 
 
-def normalizar_fecha(valor):
+# =========================================================
+# BUSCAR COLUMNA POR NOMBRE
+# =========================================================
 
-    if pd.isna(valor):
-        return pd.NaT
+def encontrar_columna(df, nombres):
 
-    try:
-        return pd.to_datetime(
-            valor,
-            errors="coerce"
-        ).normalize()
+    columnas_normalizadas = {
+        str(col).strip().lower(): col
+        for col in df.columns
+    }
 
-    except Exception:
-        return pd.NaT
+    for nombre in nombres:
+
+        nombre_normalizado = (
+            nombre.strip().lower()
+        )
+
+        if nombre_normalizado in columnas_normalizadas:
+
+            return columnas_normalizadas[
+                nombre_normalizado
+            ]
+
+    return None
 
 
 # =========================================================
 # CARGAR ARCHIVOS
 # =========================================================
 
+st.subheader("📁 Cargar archivos")
+
 archivo_principal = st.file_uploader(
-    "📁 Archivo PRINCIPAL",
-    type=["xlsx"]
+    "Archivo PRINCIPAL",
+    type=["xlsx"],
+    key="principal"
 )
 
-archivo_comparar = st.file_uploader(
-    "📁 Archivo para COMPARAR",
-    type=["xlsx"]
+archivo_secundario = st.file_uploader(
+    "Archivo SECUNDARIO",
+    type=["xlsx"],
+    key="secundario"
 )
 
 
 # =========================================================
-# PROCESAMIENTO
+# PROCESAR ARCHIVOS
 # =========================================================
 
-if archivo_principal is not None and archivo_comparar is not None:
+if archivo_principal and archivo_secundario:
 
     # -----------------------------------------------------
     # LEER ARCHIVOS
@@ -85,8 +105,8 @@ if archivo_principal is not None and archivo_comparar is not None:
             engine="openpyxl"
         )
 
-        df_comparar = pd.read_excel(
-            archivo_comparar,
+        df_secundario = pd.read_excel(
+            archivo_secundario,
             engine="openpyxl"
         )
 
@@ -102,339 +122,293 @@ if archivo_principal is not None and archivo_comparar is not None:
 
 
     # -----------------------------------------------------
+    # BUSCAR COLUMNAS AUTOMÁTICAMENTE
+    # -----------------------------------------------------
+
+    columna_rut_principal = encontrar_columna(
+        df_principal,
+        [
+            "RUT",
+            "Rut",
+            "rut"
+        ]
+    )
+
+
+    columna_run_secundario = encontrar_columna(
+        df_secundario,
+        [
+            "RUN paciente",
+            "RUN PACIENTE",
+            "RUN_PACIENTE",
+            "RUN del paciente",
+            "RUN DEL PACIENTE",
+            "RUN"
+        ]
+    )
+
+
+    columna_sexo = encontrar_columna(
+        df_secundario,
+        [
+            "Sexo",
+            "SEXO",
+            "sexo"
+        ]
+    )
+
+
+    # -----------------------------------------------------
     # VERIFICAR COLUMNAS
     # -----------------------------------------------------
 
-    if df_principal.empty:
+    if columna_rut_principal is None:
 
         st.error(
-            "❌ El archivo principal está vacío."
+            "❌ No encontré una columna llamada 'RUT' "
+            "en el archivo principal."
+        )
+
+        st.write(
+            "Columnas encontradas:",
+            list(df_principal.columns)
         )
 
         st.stop()
 
 
-    if df_comparar.empty:
+    if columna_run_secundario is None:
 
         st.error(
-            "❌ El archivo para comparar está vacío."
+            "❌ No encontré la columna 'RUN paciente' "
+            "en el archivo secundario."
+        )
+
+        st.write(
+            "Columnas encontradas:",
+            list(df_secundario.columns)
         )
 
         st.stop()
 
 
-    st.success(
-        "✅ Los dos archivos fueron cargados correctamente."
-    )
+    if columna_sexo is None:
+
+        st.error(
+            "❌ No encontré una columna 'Sexo' "
+            "en el archivo secundario."
+        )
+
+        st.write(
+            "Columnas encontradas:",
+            list(df_secundario.columns)
+        )
+
+        st.stop()
 
 
     # -----------------------------------------------------
     # INFORMACIÓN
     # -----------------------------------------------------
 
-    col1, col2 = st.columns(2)
+    st.success(
+        "✅ Columnas encontradas automáticamente."
+    )
 
-    with col1:
+    st.write(
+        f"**Archivo principal:** `{columna_rut_principal}`"
+    )
 
-        st.metric(
-            "Filas archivo principal",
-            len(df_principal)
-        )
-
-    with col2:
-
-        st.metric(
-            "Filas archivo comparar",
-            len(df_comparar)
-        )
+    st.write(
+        f"**Archivo secundario:** "
+        f"`{columna_run_secundario}` → `{columna_sexo}`"
+    )
 
 
     # =====================================================
-    # SELECCIÓN DE COLUMNAS
+    # NORMALIZAR RUT
     # =====================================================
 
-    st.subheader("🔑 Seleccionar RUT y Fecha")
+    df_principal["_RUT_BUSQUEDA"] = (
+        df_principal[columna_rut_principal]
+        .apply(normalizar_rut)
+    )
 
 
-    col1, col2 = st.columns(2)
-
-
-    # -----------------------------------------------------
-    # ARCHIVO PRINCIPAL
-    # -----------------------------------------------------
-
-    with col1:
-
-        st.markdown("### 📁 Archivo principal")
-
-        columna_rut_principal = st.selectbox(
-            "Columna RUT:",
-            df_principal.columns,
-            key="rut_principal"
-        )
-
-        columna_fecha_principal = st.selectbox(
-            "Columna Fecha:",
-            df_principal.columns,
-            key="fecha_principal"
-        )
-
-
-    # -----------------------------------------------------
-    # ARCHIVO COMPARAR
-    # -----------------------------------------------------
-
-    with col2:
-
-        st.markdown("### 📁 Archivo para comparar")
-
-        columna_rut_comparar = st.selectbox(
-            "Columna RUT:",
-            df_comparar.columns,
-            key="rut_comparar"
-        )
-
-        columna_fecha_comparar = st.selectbox(
-            "Columna Fecha:",
-            df_comparar.columns,
-            key="fecha_comparar"
-        )
+    df_secundario["_RUN_BUSQUEDA"] = (
+        df_secundario[columna_run_secundario]
+        .apply(normalizar_rut)
+    )
 
 
     # =====================================================
-    # BOTÓN COMPARAR
+    # CREAR TABLA RUN → SEXO
     # =====================================================
 
-    if st.button(
-        "🔎 Comparar RUT + Fecha",
-        type="primary"
-    ):
-
-        # -------------------------------------------------
-        # CREAR COPIAS
-        # -------------------------------------------------
-
-        principal = df_principal.copy()
-        comparar = df_comparar.copy()
-
-
-        # -------------------------------------------------
-        # NORMALIZAR RUT
-        # -------------------------------------------------
-
-        principal["_RUT"] = (
-            principal[columna_rut_principal]
-            .apply(normalizar_rut)
-        )
-
-        comparar["_RUT"] = (
-            comparar[columna_rut_comparar]
-            .apply(normalizar_rut)
-        )
-
-
-        # -------------------------------------------------
-        # NORMALIZAR FECHAS
-        # -------------------------------------------------
-
-        principal["_FECHA"] = (
-            principal[columna_fecha_principal]
-            .apply(normalizar_fecha)
-        )
-
-        comparar["_FECHA"] = (
-            comparar[columna_fecha_comparar]
-            .apply(normalizar_fecha)
-        )
-
-
-        # -------------------------------------------------
-        # ELIMINAR REGISTROS SIN RUT O FECHA
-        # -------------------------------------------------
-
-        principal_validos = principal[
-            (principal["_RUT"] != "") &
-            (principal["_FECHA"].notna())
-        ].copy()
-
-
-        comparar_validos = comparar[
-            (comparar["_RUT"] != "") &
-            (comparar["_FECHA"].notna())
-        ].copy()
-
-
-        # -------------------------------------------------
-        # CREAR LLAVE RUT + FECHA
-        # -------------------------------------------------
-
-        principal_validos["_LLAVE"] = (
-            principal_validos["_RUT"]
-            + "_"
-            + principal_validos["_FECHA"].astype(str)
-        )
-
-
-        comparar_validos["_LLAVE"] = (
-            comparar_validos["_RUT"]
-            + "_"
-            + comparar_validos["_FECHA"].astype(str)
-        )
-
-
-        # -------------------------------------------------
-        # OBTENER LLAVES COINCIDENTES
-        # -------------------------------------------------
-
-        llaves_comparar = set(
-            comparar_validos["_LLAVE"]
-        )
-
-        llaves_comparar.discard("")
-
-
-        # -------------------------------------------------
-        # FILTRAR ARCHIVO PRINCIPAL
-        # -------------------------------------------------
-
-        resultado = principal_validos[
-            principal_validos["_LLAVE"].isin(
-                llaves_comparar
-            )
-        ].copy()
-
-
-        # -------------------------------------------------
-        # ELIMINAR COLUMNAS AUXILIARES
-        # -------------------------------------------------
-
-        columnas_auxiliares = [
-            "_RUT",
-            "_FECHA",
-            "_LLAVE"
+    tabla_sexo = df_secundario[
+        [
+            "_RUN_BUSQUEDA",
+            columna_sexo
         ]
+    ].copy()
 
-        resultado.drop(
-            columns=columnas_auxiliares,
-            inplace=True,
-            errors="ignore"
+
+    # Eliminar RUN vacíos
+    tabla_sexo = tabla_sexo[
+        tabla_sexo["_RUN_BUSQUEDA"] != ""
+    ]
+
+
+    # Eliminar duplicados
+    tabla_sexo = tabla_sexo.drop_duplicates(
+        subset="_RUN_BUSQUEDA",
+        keep="first"
+    )
+
+
+    # =====================================================
+    # CREAR DICCIONARIO
+    # =====================================================
+
+    diccionario_sexo = dict(
+        zip(
+            tabla_sexo["_RUN_BUSQUEDA"],
+            tabla_sexo[columna_sexo]
+        )
+    )
+
+
+    # =====================================================
+    # AGREGAR SEXO AL ARCHIVO PRINCIPAL
+    # =====================================================
+
+    df_principal["Sexo"] = (
+        df_principal["_RUT_BUSQUEDA"]
+        .map(diccionario_sexo)
+    )
+
+
+    # =====================================================
+    # NORMALIZAR SEXO
+    # =====================================================
+
+    df_principal["Sexo"] = (
+        df_principal["Sexo"]
+        .fillna("No encontrado")
+        .astype(str)
+        .str.strip()
+    )
+
+
+    # =====================================================
+    # ELIMINAR COLUMNA AUXILIAR
+    # =====================================================
+
+    df_principal.drop(
+        columns=["_RUT_BUSQUEDA"],
+        inplace=True
+    )
+
+
+    # =====================================================
+    # RESULTADO
+    # =====================================================
+
+    total = len(df_principal)
+
+    encontrados = (
+        df_principal["Sexo"] != "No encontrado"
+    ).sum()
+
+    no_encontrados = (
+        df_principal["Sexo"] == "No encontrado"
+    ).sum()
+
+
+    st.subheader("📊 Resultado")
+
+
+    col1, col2, col3 = st.columns(3)
+
+
+    with col1:
+
+        st.metric(
+            "Registros principales",
+            total
         )
 
 
-        # =================================================
-        # RESULTADOS
-        # =================================================
+    with col2:
 
-        st.subheader("📊 Resultado")
-
-
-        col1, col2, col3 = st.columns(3)
-
-
-        with col1:
-
-            st.metric(
-                "Registros válidos principal",
-                len(principal_validos)
-            )
-
-
-        with col2:
-
-            st.metric(
-                "RUT + Fecha coincidentes",
-                len(set(
-                    principal_validos[
-                        principal_validos["_LLAVE"].isin(
-                            llaves_comparar
-                        )
-                    ]["_LLAVE"]
-                ))
-            )
-
-
-        with col3:
-
-            st.metric(
-                "Filas resultado",
-                len(resultado)
-            )
-
-
-        # -------------------------------------------------
-        # SIN RESULTADOS
-        # -------------------------------------------------
-
-        if resultado.empty:
-
-            st.warning(
-                "⚠️ No se encontraron coincidencias "
-                "de RUT y Fecha."
-            )
-
-            st.stop()
-
-
-        # -------------------------------------------------
-        # MOSTRAR RESULTADO
-        # -------------------------------------------------
-
-        st.success(
-            f"✅ Se encontraron {len(resultado)} "
-            f"filas coincidentes."
+        st.metric(
+            "Sexo encontrado",
+            encontrados
         )
 
 
-        st.dataframe(
-            resultado,
-            use_container_width=True,
-            hide_index=True
+    with col3:
+
+        st.metric(
+            "No encontrado",
+            no_encontrados
         )
 
 
-        # =================================================
-        # GENERAR EXCEL
-        # =================================================
+    # =====================================================
+    # MOSTRAR RESULTADO
+    # =====================================================
 
-        try:
-
-            archivo_salida = BytesIO()
-
-
-            with pd.ExcelWriter(
-                archivo_salida,
-                engine="openpyxl"
-            ) as writer:
-
-                resultado.to_excel(
-                    writer,
-                    index=False,
-                    sheet_name="Coincidencias"
-                )
+    st.dataframe(
+        df_principal,
+        use_container_width=True,
+        hide_index=True
+    )
 
 
-            archivo_salida.seek(0)
+    # =====================================================
+    # GENERAR EXCEL
+    # =====================================================
+
+    try:
+
+        archivo_salida = BytesIO()
 
 
-            # -------------------------------------------------
-            # DESCARGAR
-            # -------------------------------------------------
+        with pd.ExcelWriter(
+            archivo_salida,
+            engine="openpyxl"
+        ) as writer:
 
-            st.download_button(
-                label="⬇️ Descargar Excel con coincidencias",
-                data=archivo_salida.getvalue(),
-                file_name="coincidencias_rut_fecha.xlsx",
-                mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "spreadsheetml.sheet"
-                )
+            df_principal.to_excel(
+                writer,
+                index=False,
+                sheet_name="Resultado"
             )
 
 
-        except Exception as e:
+        archivo_salida.seek(0)
 
-            st.error(
-                "❌ Error al generar el archivo Excel."
+
+        # =================================================
+        # DESCARGA
+        # =================================================
+
+        st.download_button(
+            label="⬇️ Descargar Excel resultado",
+            data=archivo_salida.getvalue(),
+            file_name="resultado_con_sexo.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
             )
+        )
 
-            st.exception(e)
+
+    except Exception as e:
+
+        st.error(
+            "❌ No se pudo generar el Excel."
+        )
+
+        st.exception(e)

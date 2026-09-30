@@ -168,31 +168,30 @@ if archivo_principal is not None and archivo_comparar is not None:
                 # -------------------------------------------------
                 # CREAR EXCEL PARA DESCARGAR
                 # -------------------------------------------------
-
+                
                 archivo_salida = BytesIO()
-
-                with pd.ExcelWriter(
-                    archivo_salida,
-                    engine="openpyxl"
-                ):
-
-                    resultado.to_excel(
+                
+                try:
+                    with pd.ExcelWriter(
                         archivo_salida,
-                        index=False,
-                        sheet_name="Coincidencias"
+                        engine="openpyxl"
+                    ) as writer:
+                
+                        resultado.to_excel(
+                            writer,
+                            index=False,
+                            sheet_name="Coincidencias"
+                        )
+                
+                    archivo_salida.seek(0)
+                
+                    st.download_button(
+                        label="⬇️ Descargar Excel con coincidencias",
+                        data=archivo_salida.getvalue(),
+                        file_name="coincidencias_rut.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
-
-                archivo_salida.seek(0)
-
-                st.download_button(
-                    label="⬇️ Descargar Excel con coincidencias",
-                    data=archivo_salida,
-                    file_name="coincidencias_rut.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-
-    except Exception as error:
-
-        st.error("❌ Ocurrió un error al procesar los archivos.")
-
-        st.exception(error)
+                
+                except Exception as e:
+                    st.error("❌ No se pudo generar el archivo Excel.")
+                    st.exception(e)

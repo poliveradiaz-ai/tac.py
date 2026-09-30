@@ -1,188 +1,36 @@
-import streamlit as st
-import pandas as pd
-from io import BytesIO
-
-st.set_page_config(
-    page_title="Cruce de RUT",
-    page_icon="📊",
-    layout="wide"
-)
-
-st.title("📊 Cruce de archivos Excel por RUT")
-
-st.write(
-    "Carga dos archivos Excel y obtén las filas cuyos RUT aparecen "
-    "en ambos archivos, conservando las columnas del archivo principal."
-)
-
-# ----------------------------------------------------------
-# Función para normalizar RUT
-# ---------------------------------------------------------
-
-def normalizar_rut(rut):
-    if pd.isna(rut):
-        return ""
-
-    rut = str(rut).strip().upper()
-
-    # Eliminar puntos, guiones y espacios
-    rut = rut.replace(".", "")
-    rut = rut.replace("-", "")
-    rut = rut.replace(" ", "")
-
-    return rut
-
-
-# ---------------------------------------------------------
-# Cargar archivos
-# ---------------------------------------------------------
-
-col1, col2 = st.columns(2)
-
-with col1:
-    archivo_principal = st.file_uploader(
-        "📁 Archivo principal",
-        type=["xlsx", "xls"]
-    )
-
-with col2:
-    archivo_comparar = st.file_uploader(
-        "📁 Archivo para comparar",
-        type=["xlsx", "xls"]
-    )
-
-
-if archivo_principal and archivo_comparar:
-
-    # Leer Excel
+ImportError: This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs (if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).
+Traceback:
+File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/compat/_optional.py", line 158, in import_optional_dependency
+    module = importlib.import_module(name)
+File "/usr/local/lib/python3.14/importlib/__init__.py", line 88, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
+File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
+File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
+ModuleNotFoundError
+The above exception was the direct cause of the following exception:
+File "/mount/src/tac.py/tac.py", line 58, in <module>
     df_principal = pd.read_excel(archivo_principal)
-    df_comparar = pd.read_excel(archivo_comparar)
-
-    st.success("Archivos cargados correctamente.")
-
-    # ---------------------------------------------------------
-    # Seleccionar columnas RUT
-    # ---------------------------------------------------------
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Archivo principal")
-
-        columna_rut_1 = st.selectbox(
-            "Selecciona la columna que contiene el RUT:",
-            df_principal.columns,
-            key="rut_1"
-        )
-
-    with col2:
-        st.subheader("Archivo para comparar")
-
-        columna_rut_2 = st.selectbox(
-            "Selecciona la columna que contiene el RUT:",
-            df_comparar.columns,
-            key="rut_2"
-        )
-
-    # ---------------------------------------------------------
-    # Procesar
-    # ---------------------------------------------------------
-
-    if st.button("🔎 Comparar RUT", type="primary"):
-
-        # Crear columnas temporales normalizadas
-        df_principal["_RUT_NORMALIZADO"] = (
-            df_principal[columna_rut_1]
-            .apply(normalizar_rut)
-        )
-
-        df_comparar["_RUT_NORMALIZADO"] = (
-            df_comparar[columna_rut_2]
-            .apply(normalizar_rut)
-        )
-
-        # Obtener RUT que existen en ambos archivos
-        ruts_principal = set(
-            df_principal["_RUT_NORMALIZADO"]
-        )
-
-        ruts_comparar = set(
-            df_comparar["_RUT_NORMALIZADO"]
-        )
-
-        ruts_coincidentes = (
-            ruts_principal.intersection(ruts_comparar)
-        )
-
-        # Eliminar valores vacíos
-        ruts_coincidentes.discard("")
-
-        # Filtrar archivo principal
-        resultado = df_principal[
-            df_principal["_RUT_NORMALIZADO"].isin(
-                ruts_coincidentes
-            )
-        ].copy()
-
-        # Eliminar columna auxiliar
-        resultado.drop(
-            columns=["_RUT_NORMALIZADO"],
-            inplace=True
-        )
-
-        # ---------------------------------------------------------
-        # Mostrar estadísticas
-        # ---------------------------------------------------------
-
-        st.subheader("📊 Resultado")
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-            st.metric(
-                "Filas archivo principal",
-                len(df_principal)
-            )
-
-        with c2:
-            st.metric(
-                "RUT coincidentes",
-                len(ruts_coincidentes)
-            )
-
-        with c3:
-            st.metric(
-                "Filas resultado",
-                len(resultado)
-            )
-
-        st.dataframe(
-            resultado,
-            use_container_width=True
-        )
-
-        # ---------------------------------------------------------
-        # Descargar Excel
-        # ---------------------------------------------------------
-
-        output = BytesIO()
-
-        with pd.ExcelWriter(
-            output,
-            engine="openpyxl"
-        ) as writer:
-
-            resultado.to_excel(
-                writer,
-                index=False,
-                sheet_name="Resultado"
-            )
-
-        output.seek(0)
-
-        st.download_button(
-            label="⬇️ Descargar resultado en Excel",
-            data=output,
-            file_name="resultado_cruce_rut.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/io/excel/_base.py", line 481, in read_excel
+    io = ExcelFile(
+        io,
+    ...<2 lines>...
+        engine_kwargs=engine_kwargs,
+    )
+File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/io/excel/_base.py", line 1621, in __init__
+    self._reader = self._engines[engine](
+                   ~~~~~~~~~~~~~~~~~~~~~^
+        self._io,
+        ^^^^^^^^^
+        storage_options=storage_options,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        engine_kwargs=engine_kwargs,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/io/excel/_openpyxl.py", line 559, in __init__
+    import_optional_dependency("openpyxl")
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/compat/_optional.py", line 161, in import_optional_dependency
+    raise ImportError(msg) from err

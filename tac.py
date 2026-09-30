@@ -1,36 +1,198 @@
-ImportError: This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs (if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).
-Traceback:
-File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/compat/_optional.py", line 158, in import_optional_dependency
-    module = importlib.import_module(name)
-File "/usr/local/lib/python3.14/importlib/__init__.py", line 88, in import_module
-    return _bootstrap._gcd_import(name[level:], package, level)
-           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "<frozen importlib._bootstrap>", line 1406, in _gcd_import
-File "<frozen importlib._bootstrap>", line 1371, in _find_and_load
-File "<frozen importlib._bootstrap>", line 1335, in _find_and_load_unlocked
-ModuleNotFoundError
-The above exception was the direct cause of the following exception:
-File "/mount/src/tac.py/tac.py", line 58, in <module>
-    df_principal = pd.read_excel(archivo_principal)
-File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/io/excel/_base.py", line 481, in read_excel
-    io = ExcelFile(
-        io,
-    ...<2 lines>...
-        engine_kwargs=engine_kwargs,
-    )
-File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/io/excel/_base.py", line 1621, in __init__
-    self._reader = self._engines[engine](
-                   ~~~~~~~~~~~~~~~~~~~~~^
-        self._io,
-        ^^^^^^^^^
-        storage_options=storage_options,
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        engine_kwargs=engine_kwargs,
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/io/excel/_openpyxl.py", line 559, in __init__
-    import_optional_dependency("openpyxl")
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
-File "/home/adminuser/venv/lib/python3.14/site-packages/pandas/compat/_optional.py", line 161, in import_optional_dependency
-    raise ImportError(msg) from err
+import streamlit as st
+import pandas as pd
+from io import BytesIO
+
+st.set_page_config(
+    page_title="Cruce de RUT",
+    page_icon="📊",
+    layout="wide"
+)
+
+st.title("📊 Cruce de archivos Excel por RUT")
+
+st.write(
+    "Sube dos archivos Excel. La aplicación buscará los RUT que "
+    "aparecen en ambos y conservará las columnas del archivo principal."
+)
+
+# ---------------------------------------------------------
+# FUNCIÓN PARA NORMALIZAR RUT
+# ---------------------------------------------------------
+
+def normalizar_rut(valor):
+    if pd.isna(valor):
+        return ""
+
+    rut = str(valor).strip().upper()
+
+    # Eliminar puntos, guiones y espacios
+    rut = rut.replace(".", "")
+    rut = rut.replace("-", "")
+    rut = rut.replace(" ", "")
+
+    return rut
+
+
+# ---------------------------------------------------------
+# CARGAR ARCHIVOS
+# ---------------------------------------------------------
+
+archivo_principal = st.file_uploader(
+    "📁 Selecciona el archivo PRINCIPAL",
+    type=["xlsx"]
+)
+
+archivo_comparar = st.file_uploader(
+    "📁 Selecciona el archivo para COMPARAR",
+    type=["xlsx"]
+)
+
+
+# ---------------------------------------------------------
+# PROCESAR
+# ---------------------------------------------------------
+
+if archivo_principal is not None and archivo_comparar is not None:
+
+    try:
+        df_principal = pd.read_excel(
+            archivo_principal,
+            engine="openpyxl"
+        )
+
+        df_comparar = pd.read_excel(
+            archivo_comparar,
+            engine="openpyxl"
+        )
+
+        st.success("✅ Archivos cargados correctamente.")
+
+        # -------------------------------------------------
+        # SELECCIÓN DE COLUMNAS RUT
+        # -------------------------------------------------
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Archivo principal")
+
+            columna_rut_principal = st.selectbox(
+                "Selecciona la columna RUT:",
+                df_principal.columns,
+                key="principal"
+            )
+
+        with col2:
+            st.subheader("Archivo para comparar")
+
+            columna_rut_comparar = st.selectbox(
+                "Selecciona la columna RUT:",
+                df_comparar.columns,
+                key="comparar"
+            )
+
+        # -------------------------------------------------
+        # BOTÓN DE CRUCE
+        # -------------------------------------------------
+
+        if st.button("🔎 Buscar coincidencias", type="primary"):
+
+            # Crear RUT normalizados
+            rut_principal = (
+                df_principal[columna_rut_principal]
+                .apply(normalizar_rut)
+            )
+
+            rut_comparar = (
+                df_comparar[columna_rut_comparar]
+                .apply(normalizar_rut)
+            )
+
+            # Crear conjunto de RUT del segundo archivo
+            ruts_comparar = set(rut_comparar)
+
+            # Eliminar vacíos
+            ruts_comparar.discard("")
+
+            # Filtrar el archivo principal
+            resultado = df_principal[
+                rut_principal.isin(ruts_comparar)
+            ].copy()
+
+            # -------------------------------------------------
+            # RESULTADOS
+            # -------------------------------------------------
+
+            st.subheader("📊 Resultado")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric(
+                    "Filas archivo principal",
+                    len(df_principal)
+                )
+
+            with col2:
+                st.metric(
+                    "RUT en archivo comparado",
+                    len(ruts_comparar)
+                )
+
+            with col3:
+                st.metric(
+                    "Filas coincidentes",
+                    len(resultado)
+                )
+
+            if len(resultado) == 0:
+
+                st.warning(
+                    "⚠️ No se encontraron RUT coincidentes."
+                )
+
+            else:
+
+                st.success(
+                    f"✅ Se encontraron {len(resultado)} "
+                    f"filas coincidentes."
+                )
+
+                # Mostrar resultado
+                st.dataframe(
+                    resultado,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                # -------------------------------------------------
+                # CREAR EXCEL PARA DESCARGAR
+                # -------------------------------------------------
+
+                archivo_salida = BytesIO()
+
+                with pd.ExcelWriter(
+                    archivo_salida,
+                    engine="openpyxl"
+                ):
+
+                    resultado.to_excel(
+                        archivo_salida,
+                        index=False,
+                        sheet_name="Coincidencias"
+                    )
+
+                archivo_salida.seek(0)
+
+                st.download_button(
+                    label="⬇️ Descargar Excel con coincidencias",
+                    data=archivo_salida,
+                    file_name="coincidencias_rut.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+    except Exception as error:
+
+        st.error("❌ Ocurrió un error al procesar los archivos.")
+
+        st.exception(error)

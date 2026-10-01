@@ -15,9 +15,8 @@ st.set_page_config(
 st.title("📊 Cruce automático de RUT, Fecha, Sexo y Atención")
 
 st.write(
-    "El sistema compara el RUT y la fecha de atención entre ambos "
-    "archivos y agrega Sexo, Previsión y Modalidad de Atención "
-    "al archivo principal."
+    "El sistema compara RUT y fecha entre ambos archivos y agrega "
+    "Sexo, Previsión, Modalidad de Atención y Rango Etario."
 )
 
 
@@ -32,13 +31,8 @@ def normalizar_rut(valor):
 
     valor = str(valor).strip().upper()
 
-    # Eliminar puntos
     valor = valor.replace(".", "")
-
-    # Eliminar guiones
     valor = valor.replace("-", "")
-
-    # Eliminar espacios
     valor = valor.replace(" ", "")
 
     return valor
@@ -54,6 +48,7 @@ def normalizar_fecha(valor):
         return pd.NaT
 
     try:
+
         fecha = pd.to_datetime(
             valor,
             errors="coerce",
@@ -63,11 +58,44 @@ def normalizar_fecha(valor):
         if pd.isna(fecha):
             return pd.NaT
 
-        # Eliminar hora y dejar solamente la fecha
         return fecha.normalize()
 
     except Exception:
+
         return pd.NaT
+
+
+# =========================================================
+# FUNCIÓN CLASIFICAR RANGO ETARIO
+# =========================================================
+
+def clasificar_rango_etario(edad):
+
+    if pd.isna(edad):
+        return "No informado"
+
+    try:
+
+        edad = float(edad)
+
+        if edad < 0:
+            return "Edad inválida"
+
+        elif edad <= 14:
+            return "0-14 años"
+
+        elif edad <= 17:
+            return "15-17 años"
+
+        elif edad <= 19:
+            return "18-19 años"
+
+        else:
+            return "20 y más años"
+
+    except Exception:
+
+        return "No informado"
 
 
 # =========================================================
@@ -168,6 +196,15 @@ if archivo_principal and archivo_secundario:
         ]
     )
 
+    columna_edad = encontrar_columna(
+        df_principal,
+        [
+            "EDAD",
+            "Edad",
+            "edad"
+        ]
+    )
+
 
     # =====================================================
     # BUSCAR COLUMNAS DEL ARCHIVO SECUNDARIO
@@ -230,30 +267,30 @@ if archivo_principal and archivo_secundario:
 
 
     # =====================================================
-    # VERIFICAR COLUMNAS PRINCIPALES
+    # VERIFICAR COLUMNAS DEL ARCHIVO PRINCIPAL
     # =====================================================
+
+    columnas_faltantes_principal = []
 
     if columna_rut_principal is None:
-
-        st.error(
-            "❌ No encontré una columna llamada 'RUT' "
-            "en el archivo principal."
-        )
-
-        st.write(
-            "Columnas encontradas:",
-            list(df_principal.columns)
-        )
-
-        st.stop()
-
+        columnas_faltantes_principal.append("RUT")
 
     if columna_fecha_principal is None:
+        columnas_faltantes_principal.append("FECHA")
+
+    if columna_edad is None:
+        columnas_faltantes_principal.append("EDAD")
+
+
+    if columnas_faltantes_principal:
 
         st.error(
-            "❌ No encontré una columna llamada 'FECHA' "
-            "en el archivo principal."
+            "❌ No encontré las siguientes columnas "
+            "en el archivo principal:"
         )
+
+        for columna in columnas_faltantes_principal:
+            st.write(f"- {columna}")
 
         st.write(
             "Columnas encontradas:",
@@ -264,39 +301,43 @@ if archivo_principal and archivo_secundario:
 
 
     # =====================================================
-    # VERIFICAR COLUMNAS SECUNDARIAS
+    # VERIFICAR COLUMNAS DEL ARCHIVO SECUNDARIO
     # =====================================================
 
-    columnas_faltantes = []
+    columnas_faltantes_secundario = []
 
     if columna_run_secundario is None:
-        columnas_faltantes.append("RUN paciente")
+        columnas_faltantes_secundario.append("RUN paciente")
 
     if columna_fecha_atencion is None:
-        columnas_faltantes.append("FECHA DE ATENCION")
+        columnas_faltantes_secundario.append(
+            "FECHA DE ATENCION"
+        )
 
     if columna_sexo is None:
-        columnas_faltantes.append("Sexo")
+        columnas_faltantes_secundario.append("Sexo")
 
     if columna_prevision is None:
-        columnas_faltantes.append("PREVISIÓN")
+        columnas_faltantes_secundario.append("PREVISIÓN")
 
     if columna_modalidad is None:
-        columnas_faltantes.append("MODALIDAD DE ATENCIÓN")
+        columnas_faltantes_secundario.append(
+            "MODALIDAD DE ATENCIÓN"
+        )
 
 
-    if columnas_faltantes:
+    if columnas_faltantes_secundario:
 
         st.error(
             "❌ No encontré las siguientes columnas "
             "en el archivo secundario:"
         )
 
-        for columna in columnas_faltantes:
+        for columna in columnas_faltantes_secundario:
             st.write(f"- {columna}")
 
         st.write(
-            "Columnas encontradas en el archivo secundario:",
+            "Columnas encontradas:",
             list(df_secundario.columns)
         )
 
@@ -313,7 +354,9 @@ if archivo_principal and archivo_secundario:
 
     st.write(
         f"**Archivo principal:** "
-        f"`{columna_rut_principal}` + `{columna_fecha_principal}`"
+        f"`{columna_rut_principal}` + "
+        f"`{columna_fecha_principal}` + "
+        f"`{columna_edad}`"
     )
 
     st.write(
@@ -323,7 +366,7 @@ if archivo_principal and archivo_secundario:
     )
 
     st.write(
-        f"**Datos que se agregarán:** "
+        f"**Datos agregados:** "
         f"`{columna_sexo}`, "
         f"`{columna_prevision}`, "
         f"`{columna_modalidad}`"
@@ -361,7 +404,17 @@ if archivo_principal and archivo_secundario:
 
 
     # =====================================================
-    # MOSTRAR INFORMACIÓN DE FECHAS
+    # CLASIFICAR RANGO ETARIO
+    # =====================================================
+
+    df_principal["RANGO ETARIO"] = (
+        df_principal[columna_edad]
+        .apply(clasificar_rango_etario)
+    )
+
+
+    # =====================================================
+    # INFORMAR FECHAS INVÁLIDAS
     # =====================================================
 
     fechas_principal_invalidas = (
@@ -372,12 +425,14 @@ if archivo_principal and archivo_secundario:
         df_secundario["_FECHA_BUSQUEDA"].isna().sum()
     )
 
+
     if fechas_principal_invalidas > 0:
 
         st.warning(
             f"⚠️ Hay {fechas_principal_invalidas} registros "
             "del archivo principal con FECHA inválida o vacía."
         )
+
 
     if fechas_secundario_invalidas > 0:
 
@@ -404,7 +459,7 @@ if archivo_principal and archivo_secundario:
 
 
     # =====================================================
-    # ELIMINAR RUT O FECHA VACÍOS
+    # ELIMINAR RUT Y FECHA VACÍOS
     # =====================================================
 
     tabla_cruce = tabla_cruce[
@@ -427,43 +482,15 @@ if archivo_principal and archivo_secundario:
 
 
     # =====================================================
-    # CREAR DICCIONARIOS
+    # CREAR CLAVE DE CRUCE
     # =====================================================
 
-    diccionario_sexo = dict(
+    claves_secundario = list(
         zip(
-            zip(
-                tabla_cruce["_RUN_BUSQUEDA"],
-                tabla_cruce["_FECHA_BUSQUEDA"]
-            ),
-            tabla_cruce[columna_sexo]
+            tabla_cruce["_RUN_BUSQUEDA"],
+            tabla_cruce["_FECHA_BUSQUEDA"]
         )
     )
-
-    diccionario_prevision = dict(
-        zip(
-            zip(
-                tabla_cruce["_RUN_BUSQUEDA"],
-                tabla_cruce["_FECHA_BUSQUEDA"]
-            ),
-            tabla_cruce[columna_prevision]
-        )
-    )
-
-    diccionario_modalidad = dict(
-        zip(
-            zip(
-                tabla_cruce["_RUN_BUSQUEDA"],
-                tabla_cruce["_FECHA_BUSQUEDA"]
-            ),
-            tabla_cruce[columna_modalidad]
-        )
-    )
-
-
-    # =====================================================
-    # CREAR CLAVE DE CRUCE EN PRINCIPAL
-    # =====================================================
 
     claves_principal = list(
         zip(
@@ -474,11 +501,40 @@ if archivo_principal and archivo_secundario:
 
 
     # =====================================================
+    # CREAR DICCIONARIOS
+    # =====================================================
+
+    diccionario_sexo = dict(
+        zip(
+            claves_secundario,
+            tabla_cruce[columna_sexo]
+        )
+    )
+
+    diccionario_prevision = dict(
+        zip(
+            claves_secundario,
+            tabla_cruce[columna_prevision]
+        )
+    )
+
+    diccionario_modalidad = dict(
+        zip(
+            claves_secundario,
+            tabla_cruce[columna_modalidad]
+        )
+    )
+
+
+    # =====================================================
     # AGREGAR SEXO
     # =====================================================
 
     df_principal["Sexo"] = [
-        diccionario_sexo.get(clave, "No encontrado")
+        diccionario_sexo.get(
+            clave,
+            "No encontrado"
+        )
         for clave in claves_principal
     ]
 
@@ -488,7 +544,10 @@ if archivo_principal and archivo_secundario:
     # =====================================================
 
     df_principal["PREVISIÓN"] = [
-        diccionario_prevision.get(clave, "No encontrado")
+        diccionario_prevision.get(
+            clave,
+            "No encontrado"
+        )
         for clave in claves_principal
     ]
 
@@ -498,7 +557,10 @@ if archivo_principal and archivo_secundario:
     # =====================================================
 
     df_principal["MODALIDAD DE ATENCIÓN"] = [
-        diccionario_modalidad.get(clave, "No encontrado")
+        diccionario_modalidad.get(
+            clave,
+            "No encontrado"
+        )
         for clave in claves_principal
     ]
 
@@ -543,7 +605,7 @@ if archivo_principal and archivo_secundario:
 
 
     # =====================================================
-    # RESULTADOS
+    # ESTADÍSTICAS
     # =====================================================
 
     total = len(df_principal)
@@ -561,17 +623,30 @@ if archivo_principal and archivo_secundario:
         != "No encontrado"
     ).sum()
 
+    rango_etario_informado = (
+        ~df_principal["RANGO ETARIO"].isin(
+            [
+                "No informado",
+                "Edad inválida"
+            ]
+        )
+    ).sum()
+
+
+    # =====================================================
+    # RESULTADO
+    # =====================================================
 
     st.subheader("📊 Resultado")
 
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
 
     with col1:
 
         st.metric(
-            "Registros principales",
+            "Registros",
             total
         )
 
@@ -600,9 +675,39 @@ if archivo_principal and archivo_secundario:
         )
 
 
+    with col5:
+
+        st.metric(
+            "Rango etario",
+            rango_etario_informado
+        )
+
+
+    # =====================================================
+    # RESUMEN RANGO ETARIO
+    # =====================================================
+
+    st.subheader("👥 Distribución por rango etario")
+
+    resumen_edad = (
+        df_principal["RANGO ETARIO"]
+        .value_counts()
+        .rename_axis("RANGO ETARIO")
+        .reset_index(name="CANTIDAD")
+    )
+
+    st.dataframe(
+        resumen_edad,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
     # =====================================================
     # MOSTRAR RESULTADO
     # =====================================================
+
+    st.subheader("📋 Datos resultantes")
 
     st.dataframe(
         df_principal,
@@ -630,6 +735,12 @@ if archivo_principal and archivo_secundario:
                 sheet_name="Resultado"
             )
 
+            resumen_edad.to_excel(
+                writer,
+                index=False,
+                sheet_name="Resumen Edad"
+            )
+
         archivo_salida.seek(0)
 
 
@@ -640,7 +751,10 @@ if archivo_principal and archivo_secundario:
         st.download_button(
             label="⬇️ Descargar Excel resultado",
             data=archivo_salida.getvalue(),
-            file_name="resultado_con_sexo_prevision_modalidad.xlsx",
+            file_name=(
+                "resultado_con_sexo_prevision_modalidad_"
+                "rango_etario.xlsx"
+            ),
             mime=(
                 "application/vnd.openxmlformats-officedocument."
                 "spreadsheetml.sheet"

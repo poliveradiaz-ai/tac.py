@@ -7,16 +7,17 @@ from io import BytesIO
 # =========================================================
 
 st.set_page_config(
-    page_title="Cruce RUT y Sexo",
+    page_title="Cruce RUT, Fecha, Sexo y Atención",
     page_icon="📊",
     layout="wide"
 )
 
-st.title("📊 Cruce automático de RUT y Sexo")
+st.title("📊 Cruce automático de RUT, Fecha, Sexo y Atención")
 
 st.write(
-    "El sistema compara automáticamente el RUT del archivo principal "
-    "con el RUN paciente del archivo secundario y agrega el Sexo."
+    "El sistema compara el RUT y la fecha de atención entre ambos "
+    "archivos y agrega Sexo, Previsión y Modalidad de Atención "
+    "al archivo principal."
 )
 
 
@@ -44,6 +45,32 @@ def normalizar_rut(valor):
 
 
 # =========================================================
+# FUNCIÓN NORMALIZAR FECHA
+# =========================================================
+
+def normalizar_fecha(valor):
+
+    if pd.isna(valor):
+        return pd.NaT
+
+    try:
+        fecha = pd.to_datetime(
+            valor,
+            errors="coerce",
+            dayfirst=True
+        )
+
+        if pd.isna(fecha):
+            return pd.NaT
+
+        # Eliminar hora y dejar solamente la fecha
+        return fecha.normalize()
+
+    except Exception:
+        return pd.NaT
+
+
+# =========================================================
 # BUSCAR COLUMNA POR NOMBRE
 # =========================================================
 
@@ -56,9 +83,7 @@ def encontrar_columna(df, nombres):
 
     for nombre in nombres:
 
-        nombre_normalizado = (
-            nombre.strip().lower()
-        )
+        nombre_normalizado = nombre.strip().lower()
 
         if nombre_normalizado in columnas_normalizadas:
 
@@ -121,9 +146,9 @@ if archivo_principal and archivo_secundario:
         st.stop()
 
 
-    # -----------------------------------------------------
-    # BUSCAR COLUMNAS AUTOMÁTICAMENTE
-    # -----------------------------------------------------
+    # =====================================================
+    # BUSCAR COLUMNAS DEL ARCHIVO PRINCIPAL
+    # =====================================================
 
     columna_rut_principal = encontrar_columna(
         df_principal,
@@ -134,6 +159,19 @@ if archivo_principal and archivo_secundario:
         ]
     )
 
+    columna_fecha_principal = encontrar_columna(
+        df_principal,
+        [
+            "FECHA",
+            "Fecha",
+            "fecha"
+        ]
+    )
+
+
+    # =====================================================
+    # BUSCAR COLUMNAS DEL ARCHIVO SECUNDARIO
+    # =====================================================
 
     columna_run_secundario = encontrar_columna(
         df_secundario,
@@ -147,6 +185,17 @@ if archivo_principal and archivo_secundario:
         ]
     )
 
+    columna_fecha_atencion = encontrar_columna(
+        df_secundario,
+        [
+            "FECHA DE ATENCION",
+            "Fecha de Atencion",
+            "FECHA DE ATENCIÓN",
+            "Fecha de Atención",
+            "fecha de atencion",
+            "fecha de atención"
+        ]
+    )
 
     columna_sexo = encontrar_columna(
         df_secundario,
@@ -157,10 +206,32 @@ if archivo_principal and archivo_secundario:
         ]
     )
 
+    columna_prevision = encontrar_columna(
+        df_secundario,
+        [
+            "PREVISIÓN",
+            "PREVISION",
+            "Previsión",
+            "Prevision"
+        ]
+    )
 
-    # -----------------------------------------------------
-    # VERIFICAR COLUMNAS
-    # -----------------------------------------------------
+    columna_modalidad = encontrar_columna(
+        df_secundario,
+        [
+            "MODALIDAD DE ATENCIÓN",
+            "MODALIDAD DE ATENCION",
+            "Modalidad de Atención",
+            "Modalidad de Atencion",
+            "modalidad de atención",
+            "modalidad de atencion"
+        ]
+    )
+
+
+    # =====================================================
+    # VERIFICAR COLUMNAS PRINCIPALES
+    # =====================================================
 
     if columna_rut_principal is None:
 
@@ -177,51 +248,85 @@ if archivo_principal and archivo_secundario:
         st.stop()
 
 
-    if columna_run_secundario is None:
+    if columna_fecha_principal is None:
 
         st.error(
-            "❌ No encontré la columna 'RUN paciente' "
-            "en el archivo secundario."
+            "❌ No encontré una columna llamada 'FECHA' "
+            "en el archivo principal."
         )
 
         st.write(
             "Columnas encontradas:",
-            list(df_secundario.columns)
+            list(df_principal.columns)
         )
 
         st.stop()
 
+
+    # =====================================================
+    # VERIFICAR COLUMNAS SECUNDARIAS
+    # =====================================================
+
+    columnas_faltantes = []
+
+    if columna_run_secundario is None:
+        columnas_faltantes.append("RUN paciente")
+
+    if columna_fecha_atencion is None:
+        columnas_faltantes.append("FECHA DE ATENCION")
 
     if columna_sexo is None:
+        columnas_faltantes.append("Sexo")
+
+    if columna_prevision is None:
+        columnas_faltantes.append("PREVISIÓN")
+
+    if columna_modalidad is None:
+        columnas_faltantes.append("MODALIDAD DE ATENCIÓN")
+
+
+    if columnas_faltantes:
 
         st.error(
-            "❌ No encontré una columna 'Sexo' "
-            "en el archivo secundario."
+            "❌ No encontré las siguientes columnas "
+            "en el archivo secundario:"
         )
 
+        for columna in columnas_faltantes:
+            st.write(f"- {columna}")
+
         st.write(
-            "Columnas encontradas:",
+            "Columnas encontradas en el archivo secundario:",
             list(df_secundario.columns)
         )
 
         st.stop()
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # INFORMACIÓN
-    # -----------------------------------------------------
+    # =====================================================
 
     st.success(
-        "✅ Columnas encontradas automáticamente."
+        "✅ Todas las columnas necesarias fueron encontradas."
     )
 
     st.write(
-        f"**Archivo principal:** `{columna_rut_principal}`"
+        f"**Archivo principal:** "
+        f"`{columna_rut_principal}` + `{columna_fecha_principal}`"
     )
 
     st.write(
         f"**Archivo secundario:** "
-        f"`{columna_run_secundario}` → `{columna_sexo}`"
+        f"`{columna_run_secundario}` + "
+        f"`{columna_fecha_atencion}`"
+    )
+
+    st.write(
+        f"**Datos que se agregarán:** "
+        f"`{columna_sexo}`, "
+        f"`{columna_prevision}`, "
+        f"`{columna_modalidad}`"
     )
 
 
@@ -234,7 +339,6 @@ if archivo_principal and archivo_secundario:
         .apply(normalizar_rut)
     )
 
-
     df_secundario["_RUN_BUSQUEDA"] = (
         df_secundario[columna_run_secundario]
         .apply(normalizar_rut)
@@ -242,54 +346,165 @@ if archivo_principal and archivo_secundario:
 
 
     # =====================================================
-    # CREAR TABLA RUN → SEXO
+    # NORMALIZAR FECHAS
     # =====================================================
 
-    tabla_sexo = df_secundario[
+    df_principal["_FECHA_BUSQUEDA"] = (
+        df_principal[columna_fecha_principal]
+        .apply(normalizar_fecha)
+    )
+
+    df_secundario["_FECHA_BUSQUEDA"] = (
+        df_secundario[columna_fecha_atencion]
+        .apply(normalizar_fecha)
+    )
+
+
+    # =====================================================
+    # MOSTRAR INFORMACIÓN DE FECHAS
+    # =====================================================
+
+    fechas_principal_invalidas = (
+        df_principal["_FECHA_BUSQUEDA"].isna().sum()
+    )
+
+    fechas_secundario_invalidas = (
+        df_secundario["_FECHA_BUSQUEDA"].isna().sum()
+    )
+
+    if fechas_principal_invalidas > 0:
+
+        st.warning(
+            f"⚠️ Hay {fechas_principal_invalidas} registros "
+            "del archivo principal con FECHA inválida o vacía."
+        )
+
+    if fechas_secundario_invalidas > 0:
+
+        st.warning(
+            f"⚠️ Hay {fechas_secundario_invalidas} registros "
+            "del archivo secundario con FECHA DE ATENCION "
+            "inválida o vacía."
+        )
+
+
+    # =====================================================
+    # CREAR TABLA DE CRUCE
+    # =====================================================
+
+    tabla_cruce = df_secundario[
         [
             "_RUN_BUSQUEDA",
-            columna_sexo
+            "_FECHA_BUSQUEDA",
+            columna_sexo,
+            columna_prevision,
+            columna_modalidad
         ]
     ].copy()
 
 
-    # Eliminar RUN vacíos
-    tabla_sexo = tabla_sexo[
-        tabla_sexo["_RUN_BUSQUEDA"] != ""
+    # =====================================================
+    # ELIMINAR RUT O FECHA VACÍOS
+    # =====================================================
+
+    tabla_cruce = tabla_cruce[
+        (tabla_cruce["_RUN_BUSQUEDA"] != "") &
+        (tabla_cruce["_FECHA_BUSQUEDA"].notna())
     ]
 
 
-    # Eliminar duplicados
-    tabla_sexo = tabla_sexo.drop_duplicates(
-        subset="_RUN_BUSQUEDA",
+    # =====================================================
+    # ELIMINAR DUPLICADOS
+    # =====================================================
+
+    tabla_cruce = tabla_cruce.drop_duplicates(
+        subset=[
+            "_RUN_BUSQUEDA",
+            "_FECHA_BUSQUEDA"
+        ],
         keep="first"
     )
 
 
     # =====================================================
-    # CREAR DICCIONARIO
+    # CREAR DICCIONARIOS
     # =====================================================
 
     diccionario_sexo = dict(
         zip(
-            tabla_sexo["_RUN_BUSQUEDA"],
-            tabla_sexo[columna_sexo]
+            zip(
+                tabla_cruce["_RUN_BUSQUEDA"],
+                tabla_cruce["_FECHA_BUSQUEDA"]
+            ),
+            tabla_cruce[columna_sexo]
+        )
+    )
+
+    diccionario_prevision = dict(
+        zip(
+            zip(
+                tabla_cruce["_RUN_BUSQUEDA"],
+                tabla_cruce["_FECHA_BUSQUEDA"]
+            ),
+            tabla_cruce[columna_prevision]
+        )
+    )
+
+    diccionario_modalidad = dict(
+        zip(
+            zip(
+                tabla_cruce["_RUN_BUSQUEDA"],
+                tabla_cruce["_FECHA_BUSQUEDA"]
+            ),
+            tabla_cruce[columna_modalidad]
         )
     )
 
 
     # =====================================================
-    # AGREGAR SEXO AL ARCHIVO PRINCIPAL
+    # CREAR CLAVE DE CRUCE EN PRINCIPAL
     # =====================================================
 
-    df_principal["Sexo"] = (
-        df_principal["_RUT_BUSQUEDA"]
-        .map(diccionario_sexo)
+    claves_principal = list(
+        zip(
+            df_principal["_RUT_BUSQUEDA"],
+            df_principal["_FECHA_BUSQUEDA"]
+        )
     )
 
 
     # =====================================================
-    # NORMALIZAR SEXO
+    # AGREGAR SEXO
+    # =====================================================
+
+    df_principal["Sexo"] = [
+        diccionario_sexo.get(clave, "No encontrado")
+        for clave in claves_principal
+    ]
+
+
+    # =====================================================
+    # AGREGAR PREVISIÓN
+    # =====================================================
+
+    df_principal["PREVISIÓN"] = [
+        diccionario_prevision.get(clave, "No encontrado")
+        for clave in claves_principal
+    ]
+
+
+    # =====================================================
+    # AGREGAR MODALIDAD DE ATENCIÓN
+    # =====================================================
+
+    df_principal["MODALIDAD DE ATENCIÓN"] = [
+        diccionario_modalidad.get(clave, "No encontrado")
+        for clave in claves_principal
+    ]
+
+
+    # =====================================================
+    # NORMALIZAR RESULTADOS
     # =====================================================
 
     df_principal["Sexo"] = (
@@ -299,36 +514,58 @@ if archivo_principal and archivo_secundario:
         .str.strip()
     )
 
+    df_principal["PREVISIÓN"] = (
+        df_principal["PREVISIÓN"]
+        .fillna("No encontrado")
+        .astype(str)
+        .str.strip()
+    )
+
+    df_principal["MODALIDAD DE ATENCIÓN"] = (
+        df_principal["MODALIDAD DE ATENCIÓN"]
+        .fillna("No encontrado")
+        .astype(str)
+        .str.strip()
+    )
+
 
     # =====================================================
-    # ELIMINAR COLUMNA AUXILIAR
+    # ELIMINAR COLUMNAS AUXILIARES
     # =====================================================
 
     df_principal.drop(
-        columns=["_RUT_BUSQUEDA"],
+        columns=[
+            "_RUT_BUSQUEDA",
+            "_FECHA_BUSQUEDA"
+        ],
         inplace=True
     )
 
 
     # =====================================================
-    # RESULTADO
+    # RESULTADOS
     # =====================================================
 
     total = len(df_principal)
 
-    encontrados = (
+    sexo_encontrado = (
         df_principal["Sexo"] != "No encontrado"
     ).sum()
 
-    no_encontrados = (
-        df_principal["Sexo"] == "No encontrado"
+    prevision_encontrada = (
+        df_principal["PREVISIÓN"] != "No encontrado"
+    ).sum()
+
+    modalidad_encontrada = (
+        df_principal["MODALIDAD DE ATENCIÓN"]
+        != "No encontrado"
     ).sum()
 
 
     st.subheader("📊 Resultado")
 
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
 
     with col1:
@@ -343,15 +580,23 @@ if archivo_principal and archivo_secundario:
 
         st.metric(
             "Sexo encontrado",
-            encontrados
+            sexo_encontrado
         )
 
 
     with col3:
 
         st.metric(
-            "No encontrado",
-            no_encontrados
+            "Previsión encontrada",
+            prevision_encontrada
+        )
+
+
+    with col4:
+
+        st.metric(
+            "Modalidad encontrada",
+            modalidad_encontrada
         )
 
 
@@ -374,7 +619,6 @@ if archivo_principal and archivo_secundario:
 
         archivo_salida = BytesIO()
 
-
         with pd.ExcelWriter(
             archivo_salida,
             engine="openpyxl"
@@ -386,7 +630,6 @@ if archivo_principal and archivo_secundario:
                 sheet_name="Resultado"
             )
 
-
         archivo_salida.seek(0)
 
 
@@ -397,7 +640,7 @@ if archivo_principal and archivo_secundario:
         st.download_button(
             label="⬇️ Descargar Excel resultado",
             data=archivo_salida.getvalue(),
-            file_name="resultado_con_sexo.xlsx",
+            file_name="resultado_con_sexo_prevision_modalidad.xlsx",
             mime=(
                 "application/vnd.openxmlformats-officedocument."
                 "spreadsheetml.sheet"
